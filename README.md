@@ -1,3 +1,5 @@
+[![Build Status](https://secure.travis-ci.org/ssoper/timeslice.png)](http://travis-ci.org/ssoper/timeslice)
+
 ### Description
 
 Used for collecting data into discrete 60 second time slices. So say you're at 23:45:12 and you want to collect data for the previous slice of 60 seconds. That is, you want to get data starting from 23:44:00 and going to 23:44:59, not from 23:44:12. This can be used for supplying data to 3rd party libraries such as Graphite.
