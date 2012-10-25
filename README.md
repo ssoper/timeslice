@@ -32,11 +32,6 @@ Use
       ts.fields('push', function(err, results) {
         console.log(results); // { response: [56, 129, 23] }
       });
-      var times = [];
-      for (var i=0; i < 5; i++) {
-        times.push(Math.random()*100);
-        ts.push('response', times[i]);
-      }
 
 #### License
 
