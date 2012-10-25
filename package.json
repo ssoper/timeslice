@@ -1,6 +1,7 @@
 {
   "name": "timeslice",
   "version": "0.0.1",
+  "license": "MIT",
   "scripts": {
     "test": "make test"
   },
