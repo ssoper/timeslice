@@ -147,9 +147,10 @@ Timeslice.prototype.setup = function(opts, cb) {
      });
     }
   ], function(err) {
+    if (!cb)
+      return;
     if (err)
       return cb(err);
-
     return cb(null, masterCount);
   });
 }
