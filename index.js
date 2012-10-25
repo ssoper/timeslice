@@ -1,261 +1,158 @@
-var net = require('net'),
-    os = require('os')
+var os = require('os'),
+    util = require('util'),
+    async = require('async'),
+    moment = require('moment'),
+    fakeredis = require('fakeredis'),
+    redis = require('./redis-client')
 
-module.exports = function(client, keyName) {
+// Helper object to manage redis keys
+var RedisKey = function(base) {
+  this.key = base;
+};
 
-  var key = 'stats:' + keyName + ':';
-
-  function Timeslice() {
-    
-  }
-
+RedisKey.prototype.add = function() {
+  var args = Array.prototype.slice.call(arguments);
+  return this.key + ':' + args.join(':');
 }
 
+function Timeslice() {
+  this.baseKey = false;
+  this.client = false;
+}
 
-   //  events = require('events'),
-   //  util = require('util'),
-   //  moment = require('moment'),
-   //  async = require('async'),
-   //  config = require('./config'),
-   //  env = require('./env'),
-   // logger = require('./logger'),
-   // redis = require('../node_modules/kue/node_modules/redis');
-
-
-function Stats() {
-  var client,
-      masterKey,
-      redisUnavailable = false;
-
-  if (config.stats && config.stats.key) {
-    masterKey = 'stats:' + config.stats.key + ':';
-  }
-
-  var connectToRedis = function() {
-    client = redis.createClient(config.redis.port, config.redis.host)
-  };
-
-  var getHosts = function(topKey, cb) {
-    if (env.production || env.staging) {
-      var hostsKey = topKey + 'fields:hosts';
-      client.zrange(hostsKey, 0, -1, function(err, hosts) {
-        cb(hosts);
-      });
-    } else {
-      cb(['localhost']);
+Timeslice.prototype.start = function(appKey, needRedis) {
+  this.baseKey = new RedisKey('stats:' + appKey);
+  if (!needRedis) {
+    this.redis.createClient = function() {
+      return fakeredis.createClient()
     }
   }
 
-  function Public() {
-    events.EventEmitter.call(this);
-
-    this.connect = function() {
-      var self = this;
-      net.createConnection(config.redis.port, config.redis.host).
-        on('error', function(err) {
-          if (err.code == 'ECONNREFUSED' && (env.production || env.staging))
-            throw err
-          redisUnavailable = true;
-        }).
-        on('connect', function() {
-          this.end();
-          connectToRedis();
-
-          if (!config.stats)
-            return;
-
-          // Setup the fields in Redis
-          async.series([
-            function(series_cb) {
-              var count = 0;
-              async.forEachSeries(config.stats.push, function(member, async_cb) {
-                var key = masterKey + 'fields:push';
-                client.zadd(key, count, member, function(err, result) {
-                  count++;
-                  async_cb();
-                });
-              }, function(err) {
-                series_cb();
-              });
-            },
-
-            function(series_cb) {
-              async.forEachSeries(config.stats.incr, function(obj, outer_cb) {
-                var field = Object.keys(obj)[0]
-                var key = masterKey + 'fields:incr:' + field;
-                var events = obj[field];
-                var count = 0;
-                async.forEachSeries(events, function(member, inner_cb) {
-                  client.zadd(key, count, member, function(err, result) {
-                    count++;
-                    inner_cb();
-                  });
-                }, function(err) {
-                  outer_cb();
-                });
-              }, function(err) {
-                series_cb();
-              });
-            },
-
-            function(series_cb) {
-              if (!config.stats.per_host) {
-                series_cb();
-                return;
-              }
-              async.series([
-                function(inner_cb) {
-                  var count = 0;
-                  async.forEachSeries(config.stats.per_host.hosts, function(host, async_cb) {
-                    var key = masterKey + 'fields:hosts';
-                    client.zadd(key, count, host, function(err, result) {
-                      count++;
-                      async_cb();
-                    });
-                  }, function(err) {
-                    inner_cb();
-                  });
-                },
-
-                function(inner_cb) {
-                  var count = 0;
-                  async.forEachSeries(config.stats.per_host.fields, function(field, async_cb) {
-                    var key = masterKey + 'fields:names';
-                    client.zadd(key, count, field, function(err, result) {
-                      count++;
-                      async_cb();
-                    });
-                  }, function(err) {
-                    inner_cb();
-                  });
-                },
-              ], function(err) {
-                series_cb();
-              });
-            }
-          ], function(err) {
-            logger.debug('Updated Redis config');
-            self.emit('updated', null);
-          });
-        });
-    };
-
-    this.push = function(key, executionTime) {
-      if (redisUnavailable)
-        return false;
-
-      key = masterKey + key + ':' + moment().format('YYYYMMDDhhmm');
-      client.lpush(key, executionTime, function(err, result) {
-        !err && client.expire(key, 86400);
-      });
-    };
-
-    this.incr = function(key, field) {
-      if (redisUnavailable)
-        return false;
-
-      key = masterKey + key + ':' + moment().format('YYYYMMDDhhmm');
-      client.hincrby(key, field, 1, function(err, result) {
-        !err && client.expire(key, 86400);
-      });
-    };
-
-    this.set = function(key, value) {
-      if (redisUnavailable)
-        return false;
-
-      var host = (env.production || env.staging) ? os.hostname() : 'localhost';
-      key = masterKey + host + ':' + key + ':' + moment().format('YYYYMMDDhhmm');
-      client.set(key, value, function(err, result) {
-        !err && client.expire(key, 86400);
-      });
-    };
-
-    this.render = function(appKey, push_cb, cb) {
-      if (redisUnavailable) {
-        cb([]);
-        return;
-      }
-
-      var topKey = 'stats:' + appKey + ':';
-      var minute = moment().subtract('minutes', 1).format('YYYYMMDDhhmm')
-      var results = [];
-
-      async.series([
-        function(series_cb) {
-          var configKey = topKey + 'fields:push';
-          client.zrange(configKey, 0, -1, function(err, keys) {
-            async.forEachSeries(keys, function(key, async_cb) {
-              var key = topKey + key + ':' + minute;
-              client.lrange(key, 0, -1, function(err, items) {
-                push_cb(key, items, function(name, value) {
-                  results.push({ name: name, value: value });
-                  async_cb();
-                });
-              });
-            }, function(err) {
-              series_cb();
-            });
-          });
-        },
-
-        function(series_cb) {
-          var configKey = topKey + 'fields:incr:*';
-          client.keys(configKey, function(err, keys) {
-            async.forEachSeries(keys, function(incrKey, each_series_cb) {
-              client.zrange(incrKey, 0, -1, function(err, events) {
-                var zKey = topKey + incrKey.split(':').pop() + ':' + minute;
-                async.forEach(events, function(evt, async_cb) {
-                  client.hget(zKey, evt, function(err, value) {
-                    var name = evt.replace(/_/, ' ');
-                    name = name.charAt(0).toUpperCase() + name.slice(1);
-                    results.push({ name: name, value: (value || 0) });
-                    async_cb();
-                  });
-                }, function(err) {
-                  each_series_cb();
-                });
-              });
-            }, function(err) {
-              series_cb();
-            });
-          })
-        },
-
-        function(series_cb) {
-          var fieldsKey = topKey + 'fields:names';
-          client.zrange(fieldsKey, 0, -1, function(err, fields) {
-            var hostsKey = topKey + 'fields:hosts';
-            getHosts(topKey, function(hosts) {
-              async.forEachSeries(hosts, function(host, host_cb) {
-                async.forEachSeries(fields, function(field, field_cb) {
-                  var key = topKey + host + ':' + field + ':' + minute;
-                  client.get(key, function(err, value) {
-                    var name = key.split(':').slice(2, -1).join(' ').replace(/_/g, ' ');
-                    name = name.charAt(0).toUpperCase() + name.slice(1);
-                    results.push({ name: name, value: (value || 0) });
-                    field_cb();
-                  });
-                }, function(err) {
-                  host_cb();
-                })
-              }, function(err) {
-                series_cb();
-              });
-            });
-          })
-        }
-      ], function(err) {
-        cb && cb(results);
-      })
-    };
-  };
-
-  util.inherits(Public, events.EventEmitter);
-
-  return new Public;
+  this.client = redis.client();
 }
 
-var stats = new Stats();
-stats.connect();
-module.exports = stats;
+Timeslice.prototype.stop = function() {
+  this.client.quit();
+}
+
+Timeslice.prototype.push = function(key, value) {
+  var self = this;
+  key = self.baseKey.add(key, moment().format('YYYYMMDDhhmm'));
+  self.client.lpush(key, value, function(err, result) {
+    !err && self.client.expire(key, 86400);
+  });
+};
+
+Timeslice.prototype.incr = function(field) {
+  var self = this;
+  var key = self.baseKey.add('incr', moment().format('YYYYMMDDhhmm'));
+  self.client.hincrby(key, field, 1, function(err, result) {
+    !err && self.client.expire(key, 86400);
+  });
+};
+
+Timeslice.prototype.fields = function(type, offset, cb) {
+  if (!cb) {
+    cb = offset;
+    offset = 1;
+  }
+
+  var self = this;
+  var minute = moment().subtract('minutes', offset).format('YYYYMMDDhhmm');
+  var results = {};
+
+  var parseKey = function(redisKey) {
+    var parts = redisKey.split(':');
+    return parts[parts.length - 1];
+  }
+
+  if (type == 'push') {
+    var configKey = self.baseKey.add('fields','push');
+
+    self.client.zrange(configKey, 0, -1, function(err, keys) {
+      async.forEachSeries(keys, function(key, async_cb) {
+        var resultKey = parseKey(key);
+        results[resultKey] = [];
+        var timeKey = self.baseKey.add(key, minute);
+        self.client.lrange(timeKey, 0, -1, function(err, items) {
+          items.forEach(function(item) {
+            results[resultKey].unshift(item);
+          });
+
+          async_cb();
+        });
+      }, function(err) {
+        return cb(null, results);
+      });
+    });
+  } else if (type == 'incr') {
+    var fieldsKey = self.baseKey.add('fields','incr');
+    var key = self.baseKey.add('incr', minute);
+
+    self.client.zrange(fieldsKey, 0, -1, function(err, fields) {
+      async.forEachSeries(fields, function(field, async_cb) {
+        results[field] = 0;
+        self.client.hget(key, field, function(err, value) {
+          if (value)
+            results[field] = value;
+          async_cb();
+        });
+      }, function(err) {
+        return cb(null, results);
+      });
+    });
+  }
+}
+
+Timeslice.prototype.setup = function(opts, cb) {
+  if (!this.client)
+    return cb('No redis client');
+
+  var self = this;
+  var masterCount = 0;
+
+  var addField = function(list, key, cb) {
+    var count = 0;
+    async.forEachSeries(list, function(member, async_cb) {
+      var addKey = self.baseKey.add('fields', key);
+      self.client.zadd(addKey, count, member, function(err, result) {
+        count++;
+        async_cb();
+      });
+    }, function(err) {
+      cb(null, count);
+    });
+  }
+
+  async.series([
+    function(series_cb) {
+      if (!opts.push)
+        return series_cb();
+
+      // The 'push' key for values such as response times where you want to collect and then find the min, max, avg, etc
+      addField(opts.push, 'push', function(err, count) {
+        masterCount += count;
+        series_cb();
+      });
+    },
+
+    function(series_cb) {
+      if (!opts.incr)
+        return series_cb();
+
+     // The 'incr' key is used for values such as total number of users
+     addField(opts.incr, 'incr', function(err, count) {
+       masterCount += count;
+       series_cb();
+     });
+    }
+  ], function(err) {
+    if (err)
+      return cb(err);
+
+    return cb(null, masterCount);
+  });
+}
+
+module.exports = new Timeslice();
+module.exports.redis = redis;

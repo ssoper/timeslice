@@ -6,11 +6,12 @@
   },
   "dependencies": {
     "redis": "0.8.x",
-    "moment": "1.7.x"
+    "moment": "1.7.x",
+    "fakeredis": "0.x",
+    "async": "0.1.x"
   },
   "devDependencies": {
     "express": "3.0.x",
-    "mocha": "1.6.x",
-    "fakeredis": "0.x"
+    "mocha": "1.6.x"
   }
 }
