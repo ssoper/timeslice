@@ -2,15 +2,17 @@ var assert = require('assert'),
     express = require('express'),
     http = require('http'),
     async = require('async'),
+    fakeredis = require('fakeredis'),
     ts = require('../index')
 
 describe('api', function() {
 
   describe('client', function() {
-    it('fails with no redis', function(done) {
+    it('can connect', function(done) {
+      ts.redis.createClient = function() { return fakeredis.createClient(); }
       ts.start('key', true, function(err, connected) {
-        assert.ok(err);
-        assert.ifError(connected);
+        assert.ifError(err);
+        assert.ok(connected);
         done();
       });
     });
