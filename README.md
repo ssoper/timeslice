@@ -8,11 +8,11 @@ Currently there is support for `push` and `incr`
 
 #### Push
 
-The 'push' key is for values such as response times where you want to collect a lot of them and then find the min, max, avg, etc.
+Used for values such as response times where you want to collect a lot of them and then find the min, max, avg, etc.
 
 #### Incr
 
-The 'incr' key is a single incremented value and is used for collecting data such as total number of users.
+Used for incremental values such as total number of users.
 
 #### Usage
 
@@ -34,6 +34,34 @@ Use
       ts.fields('push', function(err, results) {
         console.log(results); // { response: [56, 129, 23] }
       });
+    });
+
+#### Express
+
+Included is [express.js](http://expressjs.com/) middleware which can be used to record response times.
+
+    app.use(ts.express());
+    
+    // Declare routes…
+    
+    ts.setup({ push: ts.parseRoutes(app) });
+    
+The name for a particular route is in the form of `(METHOD/path/:id)`. So response times for `app.post('/books')` would be listed under `(POST/books)` while response times for `app.get('/books/:id')` would be under `(GET/books/:id)`.
+
+#### Redis
+
+By default the Redis client is mocked out. You can either pass `true` or `ts.start` to force a connection to Redis.
+
+    ts.start('myAppKey', true, function(err, connected) {
+      // Connected using the default localhost:6379
+    });
+
+You can also specify the connection yourself.
+
+    var redis = require('redis');
+    ts.redis.createClient = function() {
+      return redis.createClient();
+    }
 
 #### License
 

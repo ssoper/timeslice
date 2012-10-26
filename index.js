@@ -1,4 +1,5 @@
 var os = require('os'),
+    net = require('net'),
     util = require('util'),
     async = require('async'),
     moment = require('moment'),
@@ -20,15 +21,37 @@ function Timeslice() {
   this.client = false;
 }
 
-Timeslice.prototype.start = function(appKey, needRedis) {
-  this.baseKey = new RedisKey('stats:' + appKey);
-  if (!needRedis) {
-    this.redis.createClient = function() {
-      return fakeredis.createClient()
-    }
+Timeslice.prototype.start = function(appKey, needRedis, cb) {
+  if (!cb && typeof(needRedis) != 'boolean') {
+    cb = needRedis;
+    needRedis = false;
   }
 
-  this.client = redis.client();
+  this.baseKey = new RedisKey('stats:' + appKey);
+
+  if (!needRedis) {
+    this.client = fakeredis.createClient();
+    if (cb)
+      return cb(null, true);
+  } else {
+    this.client = redis.createClient();
+    if (this.client && cb) {
+      return cb(null, true);
+    }
+
+    net.createConnection(6379, 'localhost')
+      .on('error', function(err) {
+        if (err.code == 'ECONNREFUSED') {
+          return cb(err, false);
+        }
+      })
+      .on('connect', function() {
+        this.end();
+        this.client = redis.defaultClient();
+        if (cb)
+          return cb(null, true);
+      });
+  }
 }
 
 Timeslice.prototype.stop = function() {
@@ -62,7 +85,7 @@ Timeslice.prototype.fields = function(type, offset, cb) {
   var results = {};
 
   var parseKey = function(redisKey) {
-    var parts = redisKey.split(':');
+    var parts = redisKey.split(":(?![^()]*+\\))") // Split on colons that are not in parentheses
     return parts[parts.length - 1];
   }
 
@@ -153,6 +176,41 @@ Timeslice.prototype.setup = function(opts, cb) {
       return cb(err);
     return cb(null, masterCount);
   });
+}
+
+Timeslice.prototype.normalizeRoute = function(route) {
+  return '(' + route.method.toUpperCase() + route.path + ')';
+}
+
+Timeslice.prototype.parseRoutes = function(app) {
+  var routes = [];
+  var self = this;
+
+  ['get', 'post', 'put', 'delete'].forEach(function(verb) {
+    app.routes[verb] && app.routes[verb].forEach(function(route) {
+      routes.push(self.normalizeRoute(route));
+    });
+  });
+
+  return routes;
+};
+
+Timeslice.prototype.express = function() {
+  var self = this;
+
+  return function(req, res, next){
+    var start = new Date;
+
+    if (res._responseTimeslice) return next();
+    res._responseTimeslice = true;
+
+    res.on('header', function(header) {
+      var field = self.normalizeRoute(req.route);
+      self.push(field, new Date - start);
+    });
+
+    next();
+  };
 }
 
 module.exports = new Timeslice();

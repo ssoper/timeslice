@@ -19,16 +19,9 @@ var redis = require('redis');
  */
 
 exports.createClient = function() {
+  return false;
+};
+
+exports.defaultClient = function() {
   return redis.createClient();
-};
-
-/**
- * Create or return the existing RedisClient.
- *
- * @return {RedisClient}
- * @api private
- */
-
-exports.client = function(){
-  return exports._client || (exports._client = exports.createClient());
-};
+}
