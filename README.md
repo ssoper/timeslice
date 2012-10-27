@@ -38,7 +38,7 @@ Use
 
 #### Express
 
-Included is [express.js](http://expressjs.com/) middleware which can be used to record response times.
+Included is [express.js](http://expressjs.com/) middleware which can be used to record response times. Be sure it comes before the inclusion of `app.router`.
 
     app.use(ts.express());
     

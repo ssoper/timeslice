@@ -27,6 +27,7 @@ Timeslice.prototype.start = function(appKey, needRedis, cb) {
     needRedis = false;
   }
 
+  var self = this;
   this.baseKey = new RedisKey('stats:' + appKey);
 
   if (!needRedis) {
@@ -35,6 +36,7 @@ Timeslice.prototype.start = function(appKey, needRedis, cb) {
       return cb(null, true);
   } else {
     this.client = redis.createClient();
+
     if (this.client) {
       if (cb) return cb(null, true);
       return;
@@ -48,7 +50,7 @@ Timeslice.prototype.start = function(appKey, needRedis, cb) {
       })
       .on('connect', function() {
         this.end();
-        this.client = redis.defaultClient();
+        self.client = redis.defaultClient();
         if (cb)
           return cb(null, true);
       });
@@ -61,7 +63,7 @@ Timeslice.prototype.stop = function() {
 
 Timeslice.prototype.push = function(key, value) {
   var self = this;
-  key = self.baseKey.add(key, moment().format('YYYYMMDDhhmm'));
+  key = self.baseKey.add('push', key, moment().format('YYYYMMDDhhmm'));
   self.client.lpush(key, value, function(err, result) {
     !err && self.client.expire(key, 86400);
   });
@@ -97,7 +99,7 @@ Timeslice.prototype.fields = function(type, offset, cb) {
       async.forEachSeries(keys, function(key, async_cb) {
         var resultKey = parseKey(key);
         results[resultKey] = [];
-        var timeKey = self.baseKey.add(key, minute);
+        var timeKey = self.baseKey.add('push', key, minute);
         self.client.lrange(timeKey, 0, -1, function(err, items) {
           items.forEach(function(item) {
             results[resultKey].unshift(item);
@@ -129,8 +131,10 @@ Timeslice.prototype.fields = function(type, offset, cb) {
 }
 
 Timeslice.prototype.setup = function(opts, cb) {
-  if (!this.client)
-    return cb('No redis client');
+  if (!this.client) {
+    if (cb) return cb('No redis client');
+    throw 'No redis client'
+  }
 
   var self = this;
   var masterCount = 0;
@@ -177,6 +181,14 @@ Timeslice.prototype.setup = function(opts, cb) {
       return cb(err);
     return cb(null, masterCount);
   });
+}
+
+Timeslice.prototype.formatRoute = function(routeStr) {
+  var str = routeStr.substr(1, routeStr.length-2);
+  var method = str.split('/')[0];
+  var path = '/' + str.replace(/:/, '').split('/').slice(1).join('/');
+
+  return method + ' ' + path;
 }
 
 Timeslice.prototype.normalizeRoute = function(route) {
