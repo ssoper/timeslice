@@ -35,8 +35,9 @@ Timeslice.prototype.start = function(appKey, needRedis, cb) {
       return cb(null, true);
   } else {
     this.client = redis.createClient();
-    if (this.client && cb) {
-      return cb(null, true);
+    if (this.client) {
+      if (cb) return cb(null, true);
+      return;
     }
 
     net.createConnection(6379, 'localhost')
