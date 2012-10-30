@@ -218,8 +218,10 @@ Timeslice.prototype.express = function() {
     res._responseTimeslice = true;
 
     res.on('header', function(header) {
-      var field = self.normalizeRoute(req.route);
-      self.push(field, new Date - start);
+      if (req.route) {
+        var field = self.normalizeRoute(req.route);
+        self.push(field, new Date - start);
+      }
     });
 
     next();
