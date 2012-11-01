@@ -95,7 +95,7 @@ Timeslice.prototype.fields = function(type, offset, cb) {
   if (type == 'push') {
     var configKey = self.baseKey.add('fields','push');
 
-    self.client.zrange(configKey, 0, -1, function(err, keys) {
+    self.client.lrange(configKey, 0, -1, function(err, keys) {
       async.forEachSeries(keys, function(key, async_cb) {
         var resultKey = parseKey(key);
         results[resultKey] = [];
@@ -115,7 +115,7 @@ Timeslice.prototype.fields = function(type, offset, cb) {
     var fieldsKey = self.baseKey.add('fields','incr');
     var key = self.baseKey.add('incr', minute);
 
-    self.client.zrange(fieldsKey, 0, -1, function(err, fields) {
+    self.client.lrange(fieldsKey, 0, -1, function(err, fields) {
       async.forEachSeries(fields, function(field, async_cb) {
         results[field] = 0;
         self.client.hget(key, field, function(err, value) {
@@ -141,9 +141,13 @@ Timeslice.prototype.setup = function(opts, cb) {
 
   var addField = function(list, key, cb) {
     var count = 0;
+    if (!Array.isArray(list)) {
+      list = [list];
+    }
+
     async.forEachSeries(list, function(member, async_cb) {
       var addKey = self.baseKey.add('fields', key);
-      self.client.zadd(addKey, count, member, function(err, result) {
+      self.client.lpush(addKey, member, function(err, result) {
         count++;
         async_cb();
       });
