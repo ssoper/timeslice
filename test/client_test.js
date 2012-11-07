@@ -19,14 +19,25 @@ describe('api', function() {
   });
 
   describe('core', function() {
+    var appKey = 'tests' +  + Math.ceil(Math.random() *10000);
+
     before(function(done) {
-      ts.start('tests' + Math.ceil(Math.random() *10000), function(err) {
+      ts.start(appKey, function(err) {
         done();
       });
     });
 
     after(function() {
       ts.stop();
+    });
+
+    it('repeating field appears once', function(done) {
+      ts.setup({ push: ['repeat', 'repeat', 'repeat'] }, function(err) {
+        ts.client.lrange('stats:' + appKey + ':fields:push', 0, -1, function(err, results) {
+          assert.equal(results.length, 1);
+          done();
+        });
+      });
     });
 
     it('push', function(done) {
