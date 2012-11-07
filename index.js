@@ -187,6 +187,44 @@ Timeslice.prototype.setup = function(opts, cb) {
   });
 }
 
+Timeslice.prototype.statsExpress = function(stats) {
+  var results = [],
+      self = this;
+
+  Object.keys(stats).forEach(function(key) {
+    var avg = stats[key].reduce(function(prev, curr) {
+      return parseInt(prev) + parseInt(curr);
+    }, 0);
+
+    if (stats[key].length > 0)
+      avg /= stats[key].length;
+
+    var name = self.formatRoute(key);
+    if (name.match(/\s\/$/)) {
+      name = name.replace(/\s\/$/, ' root')
+    } else {
+      name = name.replace(/\s*\//g, ' ');
+    }
+
+    results.push(name + ' num hits:' + stats[key].length);
+    results.push(name + ' avg resp:' + Math.ceil(avg));
+  });
+
+  return results;
+}
+
+Timeslice.prototype.statsHits = function(stats) {
+  var results = [];
+
+  Object.keys(stats).forEach(function(key) {
+    var name = key.replace(/_/g, ' ');
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    results.push(name + ':' + stats[key]);
+  });
+
+  return results;
+}
+
 Timeslice.prototype.formatRoute = function(routeStr) {
   var str = routeStr.substr(1, routeStr.length-2);
   var method = str.split('/')[0];
