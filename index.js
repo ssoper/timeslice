@@ -148,7 +148,7 @@ Timeslice.prototype.setup = function(opts, cb) {
     async.forEachSeries(list, function(member, async_cb) {
       var addKey = self.baseKey.add('fields', key);
       self.client.lrange(addKey, 0, -1, function(err, fields) {
-        if (fields.indexOf(member) > -1)
+        if (fields && fields.indexOf(member) > -1)
           return async_cb();
 
         self.client.lpush(addKey, member, function(err, result) {
