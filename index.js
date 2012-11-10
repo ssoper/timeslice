@@ -96,6 +96,9 @@ Timeslice.prototype.fields = function(type, offset, cb) {
     var configKey = self.baseKey.add('fields','push');
 
     self.client.lrange(configKey, 0, -1, function(err, keys) {
+      if (err)
+        return cb(err)
+
       async.forEachSeries(keys, function(key, async_cb) {
         var resultKey = parseKey(key);
         results[resultKey] = [];
@@ -116,6 +119,9 @@ Timeslice.prototype.fields = function(type, offset, cb) {
     var key = self.baseKey.add('incr', minute);
 
     self.client.lrange(fieldsKey, 0, -1, function(err, fields) {
+      if (err)
+        return cb(err)
+
       async.forEachSeries(fields, function(field, async_cb) {
         results[field] = 0;
         self.client.hget(key, field, function(err, value) {
